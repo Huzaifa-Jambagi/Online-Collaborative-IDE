@@ -1,0 +1,27 @@
+body{
+    background-color:#121319;
+}
+
+/* Default: hide the warning */
+.mobile-warning {
+  display: none;
+}
+
+/* Show warning and hide IDE when screen is less than 400px */
+@media (max-width: 780px) {
+    .desktop{
+        display: none;
+    }
+  .mobile-warning {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    padding: 1rem;
+    text-align: center;
+    background: black;
+    color: white;
+    font-size: 1rem;
+  }
+
+}
