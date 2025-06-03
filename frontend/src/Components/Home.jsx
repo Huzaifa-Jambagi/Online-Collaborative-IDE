@@ -1,19 +1,28 @@
-import axios from 'axios';
 import { useForm } from "react-hook-form";
+import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 
 const Home = () => {
-    const { register, handleSubmit, formState: { errors } } = useForm();
+    const { register, handleSubmit, setValue, formState: { errors } } = useForm();
     const navigate = useNavigate();
+
+    const generateRoomID = () => {
+        const uniqueVal = uuidv4();
+        setValue('roomId', uniqueVal)
+        toast.success("Room id generated succesfully")
+
+    }
 
     const onSubmit = async (data) => {
         try {
-            const response = await axios.post('/api/rooms/join', data);
+            // const response = await axios.post('/api/rooms/join', data);
 
             navigate(`/editor/${data.roomId}`, { state: { username: data.username } });
+            toast.success("Room has been created!")
         } catch (error) {
 
-            alert('Failed to join room');
+            toast.error("Failed to join room")
         }
 
     };
@@ -48,13 +57,13 @@ const Home = () => {
                                 <button type="submit" className="btn btn-success btn-lg btn-block">JOIN</button>
                             </form>
                             <p className="mt-3 text-light">
-                                Don’t have a room Id? <span className="text-success p-2" style={{ cursor: "pointer" }}>New Room</span>
+                                Don’t have a room Id? <span className="text-success p-2" onClick={generateRoomID} style={{ cursor: "pointer" }}>New Room</span>
                             </p>
                         </div>
                     </div>
                 </div>
             </div>
-                {/* mobile screens */}
+            {/* mobile screens */}
             <div className="mobile-warning">
                 This IDE is built for desktop use. Please use a larger screen 💻
             </div>
