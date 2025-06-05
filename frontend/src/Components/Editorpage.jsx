@@ -1,7 +1,37 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { initSocket } from "../socket";
 import Client from "./Client";
 import Editor from "./Editor";
 const Editorpage = () => {
+
+  const socketRef = useRef(null);
+  const location = useLocation()
+  const { roomId } = useParams()
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const init = async () => {
+      socketRef.current = await initSocket();
+
+      socketRef.current.on('connect_error', (err) => handleError(err))
+      socketRef.current.on('connect_failed', (err) => handleError(err))
+
+      const handleError = (e) => {
+        console.log('socket error', e)
+        toast.error('Socket connection failed')
+        navigate('/');
+      }
+
+      socketRef.current.emit('join', {
+        roomId,
+        username: location.state?.username
+
+      })
+    }
+    init();
+  }, [])
 
   const [members, setMembers] = useState([
     {
@@ -21,6 +51,10 @@ const Editorpage = () => {
       username: "Zohaib"
     }
   ])
+
+  if(!location.state){
+    navigate('/')
+  }
   return (
     <div className="container-fluid vh-100 px-0 ">
       <div className="row h-100 g-0 desktop">
@@ -55,10 +89,10 @@ const Editorpage = () => {
           </div>
         </div>
       </div>
-                {/* mobile screens */}
-            <div className="mobile-warning">
-                This IDE is built for desktop use. Please use a larger screen 💻
-            </div>
+      {/* mobile screens */}
+      <div className="mobile-warning">
+        This IDE is built for desktop use. Please use a larger screen 💻
+      </div>
     </div>
   );
 };
