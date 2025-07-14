@@ -12,7 +12,7 @@ const Editorpage = () => {
   const navigate = useNavigate();
 
   const [clients, setClients] = useState([]);
-  const codeRef = useRef("");
+
 
   useEffect(() => {
     const init = async () => {
@@ -98,7 +98,7 @@ const Editorpage = () => {
         </div>
         <div className="col-md-10 d-flex flex-column h-100 text-light">
           <div className="flex-grow-1" style={{ minHeight: 0, height: "100%" }}>
-            <Editor socketRef={socketRef} codeRef={codeRef} />
+            <Editor socketRef={socketRef}  roomid={roomid}/>
           </div>
         </div>
       </div>

@@ -9,7 +9,7 @@ import axios from 'axios';
 import 'codemirror/lib/codemirror.css';
 
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 const languages = [
@@ -23,16 +23,41 @@ const languages = [
 const key = import.meta.env.VITE_API_KEY
 const ai = new GoogleGenAI({ apiKey: key });
 
-const Editor = () => {
+const Editor = ({ socketRef,  roomid }) => {
+
+  //socket connection 
+  const editorRef = useRef(null);
+  const codeRef = useRef("");
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    const handleReceiveCode = ({ code }) => {
+      if (code !== codeRef.current && editorRef.current) {
+        const transaction = editorRef.current.state.update({
+          changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
+        });
+      editorRef.current.dispatch(transaction);
+        codeRef.current = code;
+      }
+    };
+
+    socketRef.current.on("receive-code", handleReceiveCode);
+
+    return () => {
+      socketRef.current.off("receive-code", handleReceiveCode);
+    };
+  }, [socketRef]);
+
+
   const [selectedLang, setSelectedLang] = useState(languages[3]);
-  const [code, setCode] = useState('');
   const [output, setOutput] = useState('');
 
   const reviewCode = async () => {
-    try{
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: `You are an expert software engineer and code reviewer.
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: `You are an expert software engineer and code reviewer.
 
  Analyze the following code for:
 1. Syntax errors
@@ -41,12 +66,12 @@ const Editor = () => {
 4. Optimization opportunities
 Suggest improvements and fixes **with corrected code**. If the code is correct, explain why it works and dont make it very long.
 
-Code:${code}`,
-    });
-    setOutput(response.text);
-  }catch(error){
-    toast.error("Something went wrong with the AI")
-  }
+Code:${ codeRef.current }`,
+      });
+      setOutput(response.text);
+    } catch (error) {
+      toast.error("Something went wrong with the AI")
+    }
   }
 
   const runCode = async () => {
@@ -54,7 +79,7 @@ Code:${code}`,
       const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
         language: selectedLang.id,
         version: selectedLang.version,
-        files: [{ content: code }]
+        files: [{ content: codeRef.current }]
       });
       setOutput(response.data.run.output);
     } catch (err) {
@@ -85,17 +110,23 @@ Code:${code}`,
 
         <div className="flex-grow-1 position-relative">
           <CodeMirror
-            value={code}
-            height="100%"
+            value={codeRef.current}
             theme={dracula}
             extensions={selectedLang.extension ? [selectedLang.extension] : []}
-            onChange={(value) => setCode(value)}
+            height="100%"
+            onCreateEditor={(editor) => {
+              editorRef.current = editor;
+            }}
+            onChange={(value) => {
+              codeRef.current = value;
+              socketRef.current.emit("code-change", { roomid, code: value });
+            }}
           />
 
         </div>
       </div>
 
-      {/* Output Panel */}
+      {/* Output section */}
       <div className="d-flex flex-column" style={{ width: '40%', minWidth: '300px' }}>
         <div className="bg-secondary text-white p-2 border-bottom">
           <h4>Output</h4>
