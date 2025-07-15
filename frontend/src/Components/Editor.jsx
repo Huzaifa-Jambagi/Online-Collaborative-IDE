@@ -6,7 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import { dracula } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
 import axios from 'axios';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 
 const languages = [
@@ -20,60 +20,70 @@ const languages = [
 const key = import.meta.env.VITE_API_KEY
 const ai = new GoogleGenAI({ apiKey: key });
 
-const debounce = (fn, delay) => {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      fn(...args)
-    }, delay)
-  }
-}
-
 const Editor = ({ socketRef, roomid }) => {
   const editorRef = useRef(null);
   const codeRef = useRef("");
-  const isTyping = useRef(false);
-
-  const debounceEmit = useRef(debounce((code) => {
-    if (socketRef.current) {
-      socketRef.current.emit("code-change", { roomid, code });
-    }
-  }, 300)).current
-
-  useEffect(() => {
-    let cleanup = null;
-    
-    const timer = setTimeout(() => {
-      if (socketRef.current) {
-        const handleReceiveCode = ({ code }) => {
-          if (!isTyping.current && code !== editorRef.current?.state.doc.toString() && editorRef.current) {
-            const transaction = editorRef.current.state.update({
-              changes: { from: 0, to: editorRef.current.state.doc.length, insert: code }
-            });
-            editorRef.current.dispatch(transaction);
-            codeRef.current = code;
-          }
-        };
-
-        socketRef.current.on("receive-code", handleReceiveCode);
-        
-        cleanup = () => {
-          if (socketRef.current) {
-            socketRef.current.off("receive-code", handleReceiveCode);
-          }
-        };
-      }
-    }, 100);
-
-    return () => {
-      clearTimeout(timer);
-      if (cleanup) cleanup();
-    };
-  }, [socketRef, roomid]);
+  const isRemoteChange = useRef(false);
+  const debounceTimer = useRef(null);
+  const lastEmittedCode = useRef("");
 
   const [selectedLang, setSelectedLang] = useState(languages[3]);
   const [output, setOutput] = useState('');
+
+  // Debounced emit function
+  const debouncedEmit = useCallback((code) => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    
+    debounceTimer.current = setTimeout(() => {
+      if (socketRef.current && code !== lastEmittedCode.current) {
+        socketRef.current.emit("code-change", { roomid, code });
+        lastEmittedCode.current = code;
+      }
+    }, 150); // 150ms is good balance for real-time feel
+  }, [socketRef, roomid]);
+
+  useEffect(() => {
+    if (socketRef.current) {
+      const handleReceiveCode = ({ code }) => {
+        if (code !== null && editorRef.current && code !== codeRef.current) {
+          isRemoteChange.current = true;
+          
+          // Preserve cursor position
+          const selection = editorRef.current.state.selection;
+          const transaction = editorRef.current.state.update({
+            changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
+            selection
+          });
+          
+          editorRef.current.dispatch(transaction);
+          codeRef.current = code;
+          lastEmittedCode.current = code; // Update last emitted to prevent echo
+          
+          // Use requestAnimationFrame for more reliable timing
+          requestAnimationFrame(() => {
+            isRemoteChange.current = false;
+          });
+        }
+      };
+
+      socketRef.current.on("receive-code", handleReceiveCode);
+      
+      return () => {
+        socketRef.current.off("receive-code", handleReceiveCode);
+      };
+    }
+  }, [socketRef]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
   const reviewCode = async () => {
     try {
@@ -88,7 +98,7 @@ const Editor = ({ socketRef, roomid }) => {
 4. Optimization opportunities
 Suggest improvements and fixes **with corrected code**. If the code is correct, explain why it works and dont make it very long.
 
-Code:${editorRef.current?.state.doc.toString() || ""}`,
+Code:${codeRef.current}`,
       });
       setOutput(response.text);
     } catch (error) {
@@ -101,7 +111,7 @@ Code:${editorRef.current?.state.doc.toString() || ""}`,
       const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
         language: selectedLang.id,
         version: selectedLang.version,
-        files: [{ content: editorRef.current?.state.doc.toString() || "" }]
+        files: [{ content: codeRef.current }]
       });
       setOutput(response.data.run.output);
     } catch (err) {
@@ -140,11 +150,10 @@ Code:${editorRef.current?.state.doc.toString() || ""}`,
             }}
             onChange={(value) => {
               codeRef.current = value;
-              isTyping.current = true;
-              debounceEmit(value);
-              setTimeout(() => {
-                isTyping.current = false;
-              }, 500);
+              // Only emit if this is not a remote change
+              if (!isRemoteChange.current) {
+                debouncedEmit(value);
+              }
             }}
           />
         </div>
