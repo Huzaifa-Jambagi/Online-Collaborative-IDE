@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
 
   socket.on("code-change", ({ roomid, code }) => {
     socket.to(roomid).emit("receive-code", { code });
-    // console.log(`[SERVER] code-change in room ${roomid}:`, code);
+    console.log(`[SERVER] code-change in room ${roomid}:`, code);
   });
 
   socket.on('disconnect', () => {

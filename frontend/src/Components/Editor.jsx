@@ -23,30 +23,39 @@ const languages = [
 const key = import.meta.env.VITE_API_KEY
 const ai = new GoogleGenAI({ apiKey: key });
 
-const Editor = ({ socketRef,  roomid }) => {
+const Editor = ({ socketRef, roomid }) => {
 
-  //socket connection 
   const editorRef = useRef(null);
   const codeRef = useRef("");
 
   useEffect(() => {
-    if (!socketRef.current) return;
+    console.log('useEffect triggered');
 
-    const handleReceiveCode = ({ code }) => {
-      if (code !== codeRef.current && editorRef.current) {
-        const transaction = editorRef.current.state.update({
-          changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
-        });
-      editorRef.current.dispatch(transaction);
-        codeRef.current = code;
+    // Timeout to wait for socket connection to b estabilished
+    const timer = setTimeout(() => {
+      if (socketRef.current) {
+        console.log('Setting up socket listener');
+
+        const handleReceiveCode = ({ code }) => {
+          // console.log('Received code:', code);
+          if (code !== codeRef.current && editorRef.current) {
+            const transaction = editorRef.current.state.update({
+              changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
+            });
+            editorRef.current.dispatch(transaction);
+            codeRef.current = code;
+          }
+        };
+
+        socketRef.current.on("receive-code", handleReceiveCode);
+
+        return () => {
+          socketRef.current.off("receive-code", handleReceiveCode);
+        };
       }
-    };
+    }, 100); // delay to ensure socket connection is estabilished 
 
-    socketRef.current.on("receive-code", handleReceiveCode);
-
-    return () => {
-      socketRef.current.off("receive-code", handleReceiveCode);
-    };
+    return () => clearTimeout(timer);
   }, [socketRef]);
 
 
@@ -66,7 +75,7 @@ const Editor = ({ socketRef,  roomid }) => {
 4. Optimization opportunities
 Suggest improvements and fixes **with corrected code**. If the code is correct, explain why it works and dont make it very long.
 
-Code:${ codeRef.current }`,
+Code:${codeRef.current}`,
       });
       setOutput(response.text);
     } catch (error) {
