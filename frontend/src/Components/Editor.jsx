@@ -31,8 +31,8 @@ const debounce = (fn, delay) => {
 }
 
 const Editor = ({ socketRef, roomid }) => {
+  const [code, setCode] = useState("");
   const editorRef = useRef(null);
-  const codeRef = useRef("");
   const isTyping = useRef(false);
 
   const debounceEmit = useRef(debounce((code) => {
@@ -47,15 +47,12 @@ const Editor = ({ socketRef, roomid }) => {
     const timer = setTimeout(() => {
       if (socketRef.current) {
       const handleReceiveCode = ({ code }) => {
-        if (!isTyping.current && code !== codeRef.current && editorRef.current) {
-          // Don't update if we're currently typing to prevent cursor jitter
-          if (editorRef.current.state.doc.toString() !== code) {
-            const transaction = editorRef.current.state.update({
-              changes: { from: 0, to: editorRef.current.state.doc.length, insert: code }
-            });
-            editorRef.current.dispatch(transaction);
-            codeRef.current = code;
-          }
+        if (!isTyping.current && code !== editorRef.current?.state.doc.toString() && editorRef.current) {
+          const transaction = editorRef.current.state.update({
+            changes: { from: 0, to: editorRef.current.state.doc.length, insert: code }
+          });
+          editorRef.current.dispatch(transaction);
+          setCode(code);
         }
       };
 
@@ -91,7 +88,7 @@ const Editor = ({ socketRef, roomid }) => {
 4. Optimization opportunities
 Suggest improvements and fixes **with corrected code**. If the code is correct, explain why it works and dont make it very long.
 
-Code:${codeRef.current}`,
+Code:${editorRef.current?.state.doc.toString() || ""}`,
       });
       setOutput(response.text);
     } catch (error) {
@@ -104,7 +101,7 @@ Code:${codeRef.current}`,
       const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
         language: selectedLang.id,
         version: selectedLang.version,
-        files: [{ content: codeRef.current }]
+        files: [{ content: editorRef.current?.state.doc.toString() || "" }]
       });
       setOutput(response.data.run.output);
     } catch (err) {
@@ -132,29 +129,27 @@ Code:${codeRef.current}`,
           <button onClick={runCode} className="btn btn-success">Run</button>
           <button onClick={reviewCode} className="btn btn-secondary ms-2">Review</button>
         </div>
-<div className="flex-grow-1 position-relative">
-  <CodeMirror
-    value={codeRef.current}
-    theme={dracula}
-    extensions={selectedLang.extension ? [selectedLang.extension] : []}
-    height="100%"
-    onCreateEditor={(editor) => {
-      editorRef.current = editor;
-    }}
-    onChange={(value) => {
-      if (value !== codeRef.current) {
-        codeRef.current = value;
-        isTyping.current = true;
-        debounceEmit(value);
-        setTimeout(() => {
-          isTyping.current = false;
-        }, 500);
-      }
-    }}
-  />
-  </div>
-</div>
 
+        <div className="flex-grow-1 position-relative">
+          <CodeMirror
+            theme={dracula}
+            extensions={selectedLang.extension ? [selectedLang.extension] : []}
+            height="100%"
+            onCreateEditor={(editor) => {
+              editorRef.current = editor;
+            }}
+            onChange={(value) => {
+              setCode(value);
+              isTyping.current = true;
+              debounceEmit(value);
+              setTimeout(() => {
+                isTyping.current = false;
+              }, 500);
+            }}
+          />}
+          />
+        </div>
+      </div>
 
       {/* Output section */}
       <div className="d-flex flex-column" style={{ width: '40%', minWidth: '300px' }}>
