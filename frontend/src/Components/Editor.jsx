@@ -6,9 +6,6 @@ import { GoogleGenAI } from "@google/genai";
 import { dracula } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
 import axios from 'axios';
-import 'codemirror/lib/codemirror.css';
-
-
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
@@ -23,56 +20,61 @@ const languages = [
 const key = import.meta.env.VITE_API_KEY
 const ai = new GoogleGenAI({ apiKey: key });
 
-const Editor = ({ socketRef, roomid }) => {
-
-  const debounce = (fn, delay) => {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      setTimeout(() => {
-        fn(...args)
-      }, delay)
-    }
+const debounce = (fn, delay) => {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn(...args)
+    }, delay)
   }
+}
 
+const Editor = ({ socketRef, roomid }) => {
   const editorRef = useRef(null);
   const codeRef = useRef("");
   const isTyping = useRef(false);
 
   const debounceEmit = useRef(debounce((code) => {
-    socketRef.current.emit("code-change", { roomid, code });
-  }, 500)).current
+    if (socketRef.current) {
+      socketRef.current.emit("code-change", { roomid, code });
+    }
+  }, 400)).current
 
   useEffect(() => {
-    console.log('useEffect triggered');
-
-    // Timeout to wait for socket connection to b estabilished
+    let cleanup = null;
+    
     const timer = setTimeout(() => {
       if (socketRef.current) {
-        console.log('Setting up socket listener');
-
-        const handleReceiveCode = ({ code }) => {
-          // console.log('Received code:', code);
-          if (!isTyping.current && code !== codeRef.current && editorRef.current) {
-            const transaction = editorRef.current.state.update({
-              changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
-            });
-            editorRef.current.dispatch(transaction);
-            codeRef.current = code;
-          }
-        };
+      const handleReceiveCode = ({ code }) => {
+        if (!isTyping.current && code !== codeRef.current && editorRef.current) {
+          // Store cursor position before update
+          const selection = editorRef.current.state.selection;
+          
+          const transaction = editorRef.current.state.update({
+            changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
+            selection: selection // Preserve cursor position
+          });
+          editorRef.current.dispatch(transaction);
+          codeRef.current = code;
+        }
+      };
 
         socketRef.current.on("receive-code", handleReceiveCode);
-
-        return () => {
-          socketRef.current.off("receive-code", handleReceiveCode);
+        
+        cleanup = () => {
+          if (socketRef.current) {
+            socketRef.current.off("receive-code", handleReceiveCode);
+          }
         };
       }
-    }, 100); // delay to ensure socket connection is estabilished 
+    }, 100);
 
-    return () => clearTimeout(timer);
-  }, [socketRef]);
-
+    return () => {
+      clearTimeout(timer);
+      if (cleanup) cleanup();
+    };
+  }, [socketRef, roomid]);
 
   const [selectedLang, setSelectedLang] = useState(languages[3]);
   const [output, setOutput] = useState('');
@@ -147,10 +149,9 @@ Code:${codeRef.current}`,
               debounceEmit(value);
               setTimeout(() => {
                 isTyping.current = false;
-              }, 500);
+              }, 400);
             }}
           />
-
         </div>
       </div>
 
