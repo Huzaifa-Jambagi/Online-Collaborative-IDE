@@ -31,8 +31,8 @@ const debounce = (fn, delay) => {
 }
 
 const Editor = ({ socketRef, roomid }) => {
-  const [code, setCode] = useState("");
   const editorRef = useRef(null);
+  const codeRef = useRef("");
   const isTyping = useRef(false);
 
   const debounceEmit = useRef(debounce((code) => {
@@ -46,15 +46,15 @@ const Editor = ({ socketRef, roomid }) => {
     
     const timer = setTimeout(() => {
       if (socketRef.current) {
-      const handleReceiveCode = ({ code }) => {
-        if (!isTyping.current && code !== editorRef.current?.state.doc.toString() && editorRef.current) {
-          const transaction = editorRef.current.state.update({
-            changes: { from: 0, to: editorRef.current.state.doc.length, insert: code }
-          });
-          editorRef.current.dispatch(transaction);
-          setCode(code);
-        }
-      };
+        const handleReceiveCode = ({ code }) => {
+          if (!isTyping.current && code !== editorRef.current?.state.doc.toString() && editorRef.current) {
+            const transaction = editorRef.current.state.update({
+              changes: { from: 0, to: editorRef.current.state.doc.length, insert: code }
+            });
+            editorRef.current.dispatch(transaction);
+            codeRef.current = code;
+          }
+        };
 
         socketRef.current.on("receive-code", handleReceiveCode);
         
@@ -139,14 +139,13 @@ Code:${editorRef.current?.state.doc.toString() || ""}`,
               editorRef.current = editor;
             }}
             onChange={(value) => {
-              setCode(value);
+              codeRef.current = value;
               isTyping.current = true;
               debounceEmit(value);
               setTimeout(() => {
                 isTyping.current = false;
               }, 500);
             }}
-          />}
           />
         </div>
       </div>
