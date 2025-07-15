@@ -25,9 +25,23 @@ const ai = new GoogleGenAI({ apiKey: key });
 
 const Editor = ({ socketRef, roomid }) => {
 
+  const debounce = (fn, delay) => {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      setTimeout(() => {
+        fn(...args)
+      }, delay)
+    }
+  }
+
   const editorRef = useRef(null);
   const codeRef = useRef("");
-  const isTyping=useRef(false);
+  const isTyping = useRef(false);
+
+  const debounceEmit = useRef(debounce((code) => {
+    socketRef.current.emit("code-change", { roomid, code });
+  }, 500)).current
 
   useEffect(() => {
     console.log('useEffect triggered');
@@ -128,12 +142,12 @@ Code:${codeRef.current}`,
               editorRef.current = editor;
             }}
             onChange={(value) => {
-              isTyping.current=true;
               codeRef.current = value;
-              socketRef.current.emit("code-change", { roomid, code: value });
-              setTimeout(()=>{
-                isTyping.current=false
-              },150)
+              isTyping.current = true;
+              debounceEmit(value);
+              setTimeout(() => {
+                isTyping.current = false;
+              }, 500);
             }}
           />
 
