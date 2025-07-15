@@ -27,6 +27,7 @@ const Editor = ({ socketRef, roomid }) => {
 
   const editorRef = useRef(null);
   const codeRef = useRef("");
+  const isTyping=useRef(false);
 
   useEffect(() => {
     console.log('useEffect triggered');
@@ -38,7 +39,7 @@ const Editor = ({ socketRef, roomid }) => {
 
         const handleReceiveCode = ({ code }) => {
           // console.log('Received code:', code);
-          if (code !== codeRef.current && editorRef.current) {
+          if (!isTyping.current && code !== codeRef.current && editorRef.current) {
             const transaction = editorRef.current.state.update({
               changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
             });
@@ -127,8 +128,12 @@ Code:${codeRef.current}`,
               editorRef.current = editor;
             }}
             onChange={(value) => {
+              isTyping.current=true;
               codeRef.current = value;
               socketRef.current.emit("code-change", { roomid, code: value });
+              setTimeout(()=>{
+                isTyping.current=false
+              },150)
             }}
           />
 
