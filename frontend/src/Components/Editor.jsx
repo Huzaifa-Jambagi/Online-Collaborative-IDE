@@ -39,7 +39,7 @@ const Editor = ({ socketRef, roomid }) => {
     if (socketRef.current) {
       socketRef.current.emit("code-change", { roomid, code });
     }
-  }, 400)).current
+  }, 300)).current
 
   useEffect(() => {
     let cleanup = null;
@@ -48,15 +48,14 @@ const Editor = ({ socketRef, roomid }) => {
       if (socketRef.current) {
       const handleReceiveCode = ({ code }) => {
         if (!isTyping.current && code !== codeRef.current && editorRef.current) {
-          // Store cursor position before update
-          const selection = editorRef.current.state.selection;
-          
-          const transaction = editorRef.current.state.update({
-            changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
-            selection: selection // Preserve cursor position
-          });
-          editorRef.current.dispatch(transaction);
-          codeRef.current = code;
+          // Don't update if we're currently typing to prevent cursor jitter
+          if (editorRef.current.state.doc.toString() !== code) {
+            const transaction = editorRef.current.state.update({
+              changes: { from: 0, to: editorRef.current.state.doc.length, insert: code }
+            });
+            editorRef.current.dispatch(transaction);
+            codeRef.current = code;
+          }
         }
       };
 
@@ -133,27 +132,29 @@ Code:${codeRef.current}`,
           <button onClick={runCode} className="btn btn-success">Run</button>
           <button onClick={reviewCode} className="btn btn-secondary ms-2">Review</button>
         </div>
+<div className="flex-grow-1 position-relative">
+  <CodeMirror
+    value={codeRef.current}
+    theme={dracula}
+    extensions={selectedLang.extension ? [selectedLang.extension] : []}
+    height="100%"
+    onCreateEditor={(editor) => {
+      editorRef.current = editor;
+    }}
+    onChange={(value) => {
+      if (value !== codeRef.current) {
+        codeRef.current = value;
+        isTyping.current = true;
+        debounceEmit(value);
+        setTimeout(() => {
+          isTyping.current = false;
+        }, 500);
+      }
+    }}
+  />
+  </div>
+</div>
 
-        <div className="flex-grow-1 position-relative">
-          <CodeMirror
-            value={codeRef.current}
-            theme={dracula}
-            extensions={selectedLang.extension ? [selectedLang.extension] : []}
-            height="100%"
-            onCreateEditor={(editor) => {
-              editorRef.current = editor;
-            }}
-            onChange={(value) => {
-              codeRef.current = value;
-              isTyping.current = true;
-              debounceEmit(value);
-              setTimeout(() => {
-                isTyping.current = false;
-              }, 400);
-            }}
-          />
-        </div>
-      </div>
 
       {/* Output section */}
       <div className="d-flex flex-column" style={{ width: '40%', minWidth: '300px' }}>
