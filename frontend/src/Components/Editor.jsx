@@ -6,7 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import { dracula } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
 import axios from 'axios';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 const languages = [
@@ -20,70 +20,63 @@ const languages = [
 const key = import.meta.env.VITE_API_KEY
 const ai = new GoogleGenAI({ apiKey: key });
 
+const debounce = (fn, delay) => {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn(...args)
+    }, delay)
+  }
+}
+
 const Editor = ({ socketRef, roomid }) => {
   const editorRef = useRef(null);
   const codeRef = useRef("");
-  const isRemoteChange = useRef(false);
-  const debounceTimer = useRef(null);
-  const lastEmittedCode = useRef("");
+  const isTyping = useRef(false);
 
-  const [selectedLang, setSelectedLang] = useState(languages[3]);
-  const [output, setOutput] = useState('');
-
-  // Debounced emit function
-  const debouncedEmit = useCallback((code) => {
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
+  const debounceEmit = useRef(debounce((code) => {
+    if (socketRef.current) {
+      socketRef.current.emit("code-change", { roomid, code });
     }
-    
-    debounceTimer.current = setTimeout(() => {
-      if (socketRef.current && code !== lastEmittedCode.current) {
-        socketRef.current.emit("code-change", { roomid, code });
-        lastEmittedCode.current = code;
-      }
-    }, 150); 
-  }, [socketRef, roomid]);
+  }, 300)).current
 
   useEffect(() => {
-    if (socketRef.current) {
+    let cleanup = null;
+    
+    const timer = setTimeout(() => {
+      if (socketRef.current) {
       const handleReceiveCode = ({ code }) => {
-        if (code !== null && editorRef.current && code !== codeRef.current) {
-          isRemoteChange.current = true;
-          
-          // Preserving cursor position
-          const selection = editorRef.current.state.selection;
-          const transaction = editorRef.current.state.update({
-            changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
-            selection
-          });
-          
-          editorRef.current.dispatch(transaction);
-          codeRef.current = code;
-          lastEmittedCode.current = code; // Update last emitted to prevent echo
-          
-          // requestAnimationFrame for more better timing
-          requestAnimationFrame(() => {
-            isRemoteChange.current = false;
-          });
+        if (!isTyping.current && code !== codeRef.current && editorRef.current) {
+          // Don't update if we're currently typing to prevent cursor jitter
+          if (editorRef.current.state.doc.toString() !== code) {
+            const transaction = editorRef.current.state.update({
+              changes: { from: 0, to: editorRef.current.state.doc.length, insert: code }
+            });
+            editorRef.current.dispatch(transaction);
+            codeRef.current = code;
+          }
         }
       };
 
-      socketRef.current.on("receive-code", handleReceiveCode);
-      
-      return () => {
-        socketRef.current.off("receive-code", handleReceiveCode);
-      };
-    }
-  }, [socketRef]);
-
-  // Cleanup 
-  useEffect(() => {
-    return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
+        socketRef.current.on("receive-code", handleReceiveCode);
+        
+        cleanup = () => {
+          if (socketRef.current) {
+            socketRef.current.off("receive-code", handleReceiveCode);
+          }
+        };
       }
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      if (cleanup) cleanup();
     };
-  }, []);
+  }, [socketRef, roomid]);
+
+  const [selectedLang, setSelectedLang] = useState(languages[3]);
+  const [output, setOutput] = useState('');
 
   const reviewCode = async () => {
     try {
@@ -139,25 +132,29 @@ Code:${codeRef.current}`,
           <button onClick={runCode} className="btn btn-success">Run</button>
           <button onClick={reviewCode} className="btn btn-secondary ms-2">Review</button>
         </div>
+<div className="flex-grow-1 position-relative">
+  <CodeMirror
+    value={codeRef.current}
+    theme={dracula}
+    extensions={selectedLang.extension ? [selectedLang.extension] : []}
+    height="100%"
+    onCreateEditor={(editor) => {
+      editorRef.current = editor;
+    }}
+    onChange={(value) => {
+      if (value !== codeRef.current) {
+        codeRef.current = value;
+        isTyping.current = true;
+        debounceEmit(value);
+        setTimeout(() => {
+          isTyping.current = false;
+        }, 500);
+      }
+    }}
+  />
+  </div>
+</div>
 
-        <div className="flex-grow-1 position-relative">
-          <CodeMirror
-            theme={dracula}
-            extensions={selectedLang.extension ? [selectedLang.extension] : []}
-            height="100%"
-            onCreateEditor={(editor) => {
-              editorRef.current = editor;
-            }}
-            onChange={(value) => {
-              codeRef.current = value;
-              // Only emit if its not a remote change
-              if (!isRemoteChange.current) {
-                debouncedEmit(value);
-              }
-            }}
-          />
-        </div>
-      </div>
 
       {/* Output section */}
       <div className="d-flex flex-column" style={{ width: '40%', minWidth: '300px' }}>
