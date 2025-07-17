@@ -41,7 +41,7 @@ const Editor = ({ socketRef, roomid }) => {
         socketRef.current.emit("code-change", { roomid, code });
         lastEmittedCode.current = code;
       }
-    }, 150); // 150ms is good balance for real-time feel
+    }, 150); 
   }, [socketRef, roomid]);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ const Editor = ({ socketRef, roomid }) => {
         if (code !== null && editorRef.current && code !== codeRef.current) {
           isRemoteChange.current = true;
           
-          // Preserve cursor position
+          // Preserving cursor position
           const selection = editorRef.current.state.selection;
           const transaction = editorRef.current.state.update({
             changes: { from: 0, to: editorRef.current.state.doc.length, insert: code },
@@ -61,7 +61,7 @@ const Editor = ({ socketRef, roomid }) => {
           codeRef.current = code;
           lastEmittedCode.current = code; // Update last emitted to prevent echo
           
-          // Use requestAnimationFrame for more reliable timing
+          // requestAnimationFrame for more better timing
           requestAnimationFrame(() => {
             isRemoteChange.current = false;
           });
@@ -76,7 +76,7 @@ const Editor = ({ socketRef, roomid }) => {
     }
   }, [socketRef]);
 
-  // Cleanup on unmount
+  // Cleanup 
   useEffect(() => {
     return () => {
       if (debounceTimer.current) {
@@ -150,7 +150,7 @@ Code:${codeRef.current}`,
             }}
             onChange={(value) => {
               codeRef.current = value;
-              // Only emit if this is not a remote change
+              // Only emit if its not a remote change
               if (!isRemoteChange.current) {
                 debouncedEmit(value);
               }
